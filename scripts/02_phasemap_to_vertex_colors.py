@@ -1,105 +1,125 @@
 """
-Step 2: Convert a 2D dorsal phase map into per-vertex RGBA colors for the
+Step 2: Resample a 2D dorsal phase map onto per-vertex RGBA colors for the
 isocortex mesh, saved as vertex_colors.npy.
 
-Pipeline:
-    1. Load isocortex.obj (from step 1) -> vertex (x, y, z) in Allen CCF um.
-    2. Load your 2D phase map (registered to the Allen CCF dorsal projection).
-    3. For each vertex, look up the phase value at its (AP, ML) position via
-       bilinear interpolation.
-    4. Mask out vertices that fall outside the field of view OR do not face
-       dorsally (medial wall / ventral surface should stay neutral gray).
-    5. Map phase -> RGBA with a cyclic colormap and save vertex_colors.npy.
+INPUT FORMAT — this script expects an already-RGB-colored phase image:
+    phase_colormap.npy  —  shape (H, W, 3), float32 in [0, 1].
 
-The Blender script (step 3) loads vertex_colors.npy and assigns it to a
-"Phase" vertex color layer on the Cortex object.
+    The colormap is applied upstream (e.g. in MATLAB with a cyclic colormap such
+    as CET_C6, exported via mat73).  If you have raw phase values [0, 2*pi],
+    apply your colormap first:
+
+        import matplotlib.pyplot as plt
+        phase_raw  = np.load("phase_map.npy")          # (H, W) in [0, 2*pi]
+        cmap       = plt.cm.get_cmap("hsv")
+        phase_rgb  = cmap(phase_raw / (2 * np.pi))[:, :, :3]
+        np.save("phase_colormap.npy", phase_rgb.astype(np.float32))
+
+    then point PHASE_RGB_PATH at the result.
+
+COORDINATE SYSTEM — Allen CCF 25 μm atlas:
+    axis 0 = AP  (0 .. 13 200 μm)
+    axis 1 = DV  (0 ..  5 350 μm)
+    axis 2 = ML  (0 .. 11 400 μm)
+
+    Verified from isocortex.obj vertices:
+        axis 0 range: 1 803 – 10 373
+        axis 1 range:   151 –  5 535
+        axis 2 range:   502 – 10 873
+
+Pipeline:
+    1. Load isocortex.obj vertices (N, 3) in Allen CCF μm.
+    2. Build one RegularGridInterpolator per RGB channel over the phase image.
+    3. Query each vertex at (AP=axis 0, ML=axis 2).
+    4. Vertices outside the FOV → gray (0.15, 0.15, 0.15).
+    5. Save vertex_colors.npy (N, 4) RGBA, float32.
+
+The Blender render scripts (scripts/03_*.py) load vertex_colors.npy and assign it
+to a "Phase" vertex-color layer on the Cortex object.
 
 Run in a normal Python env (NOT inside Blender):
-    pip install trimesh scipy matplotlib numpy
+    pip install trimesh scipy numpy
     python 02_phasemap_to_vertex_colors.py
-
-IMPORTANT: the two values you must set for your own registration are the
-AP/ML extents of your phase map (ap_min/ap_max, ml_min/ml_max) and which
-CCF axes correspond to AP and ML. Defaults below assume axis 0 = AP and
-axis 2 = ML, with the full 25um CCF extents. Verify against your own data.
 """
 
 import numpy as np
 import trimesh
 from scipy.interpolate import RegularGridInterpolator
-import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
 # ---------------------------------------------------------------------------
 MESH_PATH       = "isocortex.obj"
-PHASE_MAP_PATH  = "phase_map.npy"     # 2D array, values in [0, 2*pi]
+PHASE_RGB_PATH  = "phase_colormap.npy"  # (H, W, 3) float32 in [0, 1]
 OUT_PATH        = "vertex_colors.npy"
 
-# AP / ML extents (in um) that your phase map image spans.
-# Full Allen CCF is roughly AP 0..13200, ML 0..11400.
-AP_MIN, AP_MAX  = 0.0, 13200.0
-ML_MIN, ML_MAX  = 0.0, 11400.0
+# Allen CCF 25 μm atlas total extents (μm).
+# H×W of phase_colormap.npy must equal (AP_BINS, ML_BINS).
+AP_TOTAL_UM     = 13200.0   # 1320 voxels × 25 μm
+ML_TOTAL_UM     = 11400.0   # 1140 voxels × 25 μm
 
-# Which CCF axis is AP vs ML for your isocortex.obj. Typically:
-#   axis 0 = AP, axis 1 = DV (depth), axis 2 = ML
-AP_AXIS_IDX = 0
-ML_AXIS_IDX = 2
-DV_AXIS_IDX = 1   # used for the dorsal-facing normal test
+# Mesh axis mapping (verify against your atlas export).
+AP_AXIS = 0    # vertices[:, AP_AXIS]  is the AP coordinate
+ML_AXIS = 2    # vertices[:, ML_AXIS]  is the ML coordinate
+DV_AXIS = 1    # used for dorsal-facing normal test (optional)
 
-# Dorsal-facing threshold: vertices whose normal points up by less than this
-# are treated as non-dorsal and painted gray. Sign/axis depend on convention.
-DORSAL_NORMAL_THRESH = 0.3
+# Dorsal-facing threshold: set to 0 to disable.  Vertices whose DV normal
+# component is below this are painted gray (medial wall / ventral surface).
+DORSAL_THRESH = 0.3
 
-CYCLIC_CMAP = "hsv"   # or a colorcet cyclic map, e.g. cc.cm.CET_C2
-GRAY        = [0.15, 0.15, 0.15, 1.0]
+GRAY = [0.15, 0.15, 0.15, 1.0]
 
 # ---------------------------------------------------------------------------
-# 1. LOAD MESH + PHASE MAP
+# 1. LOAD MESH + PHASE RGB IMAGE
 # ---------------------------------------------------------------------------
-mesh = trimesh.load(MESH_PATH)
-vertices = mesh.vertices            # (N, 3) in CCF um
-normals  = mesh.vertex_normals      # (N, 3)
+mesh       = trimesh.load(MESH_PATH)
+vertices   = mesh.vertices        # (N, 3) in CCF μm
+normals    = mesh.vertex_normals  # (N, 3)
 
-phase_map = np.load(PHASE_MAP_PATH)  # (H, W), values 0..2*pi
+phase_rgb  = np.load(PHASE_RGB_PATH)   # (H, W, 3)
+H, W       = phase_rgb.shape[:2]
 
-# ---------------------------------------------------------------------------
-# 2. BUILD INTERPOLATOR over the phase image
-# ---------------------------------------------------------------------------
-ap_axis = np.linspace(AP_MIN, AP_MAX, phase_map.shape[0])
-ml_axis = np.linspace(ML_MIN, ML_MAX, phase_map.shape[1])
-
-interpolator = RegularGridInterpolator(
-    (ap_axis, ml_axis),
-    phase_map,
-    method="linear",
-    bounds_error=False,
-    fill_value=np.nan,   # vertices outside the image -> NaN
-)
+ap_coords  = np.linspace(0, AP_TOTAL_UM, H)
+ml_coords  = np.linspace(0, ML_TOTAL_UM, W)
 
 # ---------------------------------------------------------------------------
-# 3. LOOK UP PHASE PER VERTEX
+# 2. BUILD PER-CHANNEL INTERPOLATORS
 # ---------------------------------------------------------------------------
-query_points = np.column_stack([vertices[:, AP_AXIS_IDX],
-                                vertices[:, ML_AXIS_IDX]])
-vertex_phase = interpolator(query_points)   # (N,)
+def make_interp(channel):
+    return RegularGridInterpolator(
+        (ap_coords, ml_coords),
+        phase_rgb[:, :, channel],
+        method="linear",
+        bounds_error=False,
+        fill_value=np.nan,   # NaN for vertices outside the image extent
+    )
+
+interp_r = make_interp(0)
+interp_g = make_interp(1)
+interp_b = make_interp(2)
 
 # ---------------------------------------------------------------------------
-# 4. MASK: must have data AND face dorsally
+# 3. QUERY EACH VERTEX
 # ---------------------------------------------------------------------------
-dorsal_mask = normals[:, DV_AXIS_IDX] > DORSAL_NORMAL_THRESH
-valid = ~np.isnan(vertex_phase) & dorsal_mask
+query = np.column_stack([vertices[:, AP_AXIS], vertices[:, ML_AXIS]])
+r = interp_r(query)
+g = interp_g(query)
+b = interp_b(query)
 
 # ---------------------------------------------------------------------------
-# 5. PHASE -> RGBA
+# 4. MASK: outside FOV -> gray  (add `| non_dorsal` to also mask ventral)
 # ---------------------------------------------------------------------------
-cmap = plt.cm.get_cmap(CYCLIC_CMAP)
-phase_norm = vertex_phase / (2 * np.pi)      # [0, 1]
+out_of_fov = np.isnan(r)
+non_dorsal = normals[:, DV_AXIS] < DORSAL_THRESH
+invalid    = out_of_fov   # swap to `out_of_fov | non_dorsal` if needed
 
-vertex_colors = np.tile(np.array(GRAY), (len(vertices), 1))  # default gray
-vertex_colors[valid] = cmap(phase_norm[valid])
-vertex_colors = np.clip(vertex_colors, 0.0, 1.0)
+# ---------------------------------------------------------------------------
+# 5. ASSEMBLE AND SAVE
+# ---------------------------------------------------------------------------
+vertex_colors            = np.column_stack([r, g, b, np.ones(len(vertices))])
+vertex_colors[invalid]   = GRAY
+vertex_colors            = np.clip(vertex_colors, 0.0, 1.0).astype(np.float32)
 
 np.save(OUT_PATH, vertex_colors)
 print(f"wrote {OUT_PATH}  shape={vertex_colors.shape}  "
-      f"({valid.sum()} / {len(vertices)} vertices colored)")
+      f"({(~invalid).sum()} / {len(vertices)} vertices colored)")

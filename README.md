@@ -1,109 +1,228 @@
 # Rotating Wave Phase Map on a 3D Mouse Brain
 
-Pipeline for rendering a 2D dorsal cortical phase map (rotating waves) overlaid
-onto a 3D Allen CCF mouse brain in Blender, for journal covers, posters, and
-figures.
+Render a 2D dorsal cortical phase map (rotating waves) or spiral-density data
+onto a 3D Allen CCF mouse brain in Blender.  Produces publication-quality PNGs
+for journal covers, posters, and supplementary figures.
 
-The workflow has three stages: export brain meshes, convert the phase map to
-per-vertex colors, then render in Blender from a saved camera angle.
+**Example outputs:**
+- Metallic / iridescent brain with phase-colored cortex (journal cover style)
+- Matte / scientific brain for data figures
+- Iridescent brain with hot-colormap scatter dots (spiral event locations)
+
+---
+
+## Overview
+
+The pipeline has three stages, each producing files used by the next:
 
 ```
-phase_map.npy  ─┐
-                ├─► 02 ─► vertex_colors.npy ─┐
-isocortex.obj ──┘                            ├─► 03 (Blender) ─► render.png
-root.obj  ───────────────────────────────────┘
-   ▲
-   01 (brainrender export)
+Your data (.mat files)
+        │
+        ▼
+[Step 0]  Convert .mat → .npy          notebooks/phase_colormap_workflow.py
+        │
+        ▼
+[Step 1]  Export brain meshes          scripts/01_export_brain_meshes.py
+        │                                    ↓
+        │                         root.obj, isocortex.obj
+        ▼
+[Step 2]  Map data onto mesh vertices  scripts/02_phasemap_to_vertex_colors.py
+        │                                    ↓
+        │                          vertex_colors.npy
+        ▼
+[Step 3]  Render in Blender            scripts/03_render_blender.py  (and variants)
+                                             ↓
+                                        render.png
 ```
 
-## Files
+---
 
-| File | Where it runs | What it does |
-|------|---------------|--------------|
-| `scripts/01_export_brain_meshes.py` | normal Python | Exports `root.obj` (whole brain) and `isocortex.obj` (cortex) from the Allen CCF via brainglobe-atlasapi. |
-| `scripts/02_phasemap_to_vertex_colors.py` | normal Python | Interpolates your 2D phase map onto the cortex vertices and writes `vertex_colors.npy`. |
-| `scripts/03_render_blender.py` | inside Blender | Imports the meshes, applies the phase colors and metallic/iridescent materials, lights the scene, and renders the saved camera angle to a PNG. |
-| `scripts/extract_camera_params.py` | inside Blender | Prints the current viewport camera location/rotation to paste back into step 3 when you want a new saved angle. |
+## Prerequisites
 
-## Requirements
+### Software
+- **Python 3.8+** with pip
+- **Blender 3.x or 4.x** — [download here](https://www.blender.org/download/)
+  (NumPy is bundled with Blender's Python, no extra install needed inside Blender)
 
-Python side (steps 1 and 2):
+### Your data files
+Place these in a working folder before starting:
+
+| File | Description |
+|------|-------------|
+| `phase_colormap.mat` | 2D phase map as an RGB image, registered to the Allen CCF atlas. Variable name: `rgbImage`, shape `(1320, 1140, 3)`. Cyclic colormap (e.g. CET_C6) already applied. |
+| `spiral_density.mat` | Detected spiral event coordinates. Variable name: `unique_spirals`, shape `(N, 3)` — columns are `[AP_µm, ML_µm, density_count]`. |
+
+---
+
+## Installation
 
 ```bash
+# Clone the repo
+git clone https://github.com/your-username/rotating-wave-brain-render.git
+cd rotating-wave-brain-render
+
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
-Blender side (steps 3 and the camera helper): Blender 3.x or 4.x. The render
-script uses numpy, which is bundled with Blender's Python. If it is missing:
+> **First run note:** Step 1 downloads the Allen CCF 25 µm atlas (~400 MB) and
+> caches it locally.  All subsequent runs skip the download.
 
-```python
-import subprocess, sys
-subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'numpy'])
-```
+---
 
-## How to run
+## Step-by-step usage
 
-### 1. Export the meshes (normal Python)
+### Step 0 — Convert your .mat files to .npy
 
-```bash
-cd scripts
-python 01_export_brain_meshes.py
-```
-
-First run downloads and caches the atlas. Produces `root.obj` and
-`isocortex.obj`.
-
-### 2. Build the vertex colors (normal Python)
-
-Put your registered phase map at `phase_map.npy` (2D, values in `[0, 2*pi]`),
-then edit the AP/ML extents and axis indices at the top of the script to match
-your own registration, and run:
+Run the notebook workflow script once to convert your MATLAB data files and
+verify the registration:
 
 ```bash
-python 02_phasemap_to_vertex_colors.py
+# Copy your .mat files into the repo root (or edit the paths inside the script)
+cp /path/to/phase_colormap.mat .
+cp /path/to/spiral_density.mat .
+
+python notebooks/phase_colormap_workflow.py
 ```
 
+This produces:
+- `phase_colormap.npy` — RGB phase image `(1320, 1140, 3)` float32
+- `unique_spirals.npy` — spiral coordinates `(N, 3)` float32
+- `interpolation_check.png` — visual sanity check (phase colors projected onto cortex top-down)
+
+Open `interpolation_check.png` to confirm the colors align with the brain outline before rendering.
+
+---
+
+### Step 1 — Export brain meshes from the Allen CCF atlas
+
+```bash
+python scripts/01_export_brain_meshes.py
+```
+
+Produces:
+- `root.obj` — whole-brain outer shell
+- `isocortex.obj` — dorsal cortical surface (this is what gets colored)
+
+---
+
+### Step 2 — Map your data onto mesh vertices
+
+**For the phase map:**
+```bash
+python scripts/02_phasemap_to_vertex_colors.py
+```
 Produces `vertex_colors.npy`.
 
-### 3. Render in Blender
-
-Collect `root.obj`, `isocortex.obj`, and `vertex_colors.npy` into one folder.
-Open `scripts/03_render_blender.py`, set `data_dir` near the top to that
-folder, then:
-
-1. Open Blender, go to the **Scripting** tab.
-2. Click **Open** and load `03_render_blender.py` (or paste it into a new text
-   block).
-3. Click **Run Script** (play icon) or press **Alt+P**.
-
-With `SAVE_RENDER = True` (default) it writes `rotating_wave_render.png` into
-`data_dir`. View colors live in the viewport by switching shading to
-**Rendered** or **Material Preview** (the sphere icons, top-right of the
-viewport).
-
-### Choosing a new camera angle
-
-The saved angle lives in section 9 of the render script as `cam_obj.location`
-and `cam_obj.rotation_euler`. To capture a different one:
-
-1. Frame the angle in the viewport.
-2. Press **Ctrl+Alt+Numpad 0** to snap the camera to the view.
-3. Run `extract_camera_params.py` and copy the printed values back into
-   section 9.
-
-On macOS, launch Blender from Terminal to see `print()` output:
-
+**For the spiral density map:**
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender
+python scripts/02b_density_to_vertex_colors.py
+```
+Produces `vertex_colors_density.npy`.
+
+> The scripts interpolate the 2D image onto each 3D mesh vertex using its
+> (AP, ML) position in Allen CCF coordinates.  Vertices outside the image
+> field of view are painted neutral gray.
+
+---
+
+### Step 3 — Render in Blender
+
+Collect all files (`root.obj`, `isocortex.obj`, `vertex_colors.npy`) into one
+folder.
+
+1. Open Blender
+2. Go to the **Scripting** tab (top menu bar)
+3. Click **Open** and load the render script — or paste it into a new text block
+4. Set `data_dir` at the top of the script to the folder containing your files
+5. Click **▶ Run Script** (or press **Alt+P**)
+
+The render is saved automatically as a PNG in `data_dir`.
+
+**Choose the render style that fits your use case:**
+
+| Script | Style | Best for |
+|--------|-------|----------|
+| `scripts/03_render_blender.py` | Metallic / iridescent | Journal covers, posters |
+| `scripts/03b_render_matte.py` | Matte / flat-color | Data figures, supplementary |
+| `scripts/03c_render_density_scatter.py` | Metallic + scatter dots | Spiral event locations |
+
+> To switch between phase and density data in the matte render, change
+> `VERTEX_COLORS_FILE` at the top of `03b_render_matte.py`.
+
+---
+
+### (Optional) Choose a custom camera angle
+
+The render scripts each have a saved camera angle hardcoded near the bottom.
+To capture a new angle:
+
+1. Navigate to your desired view in the Blender **3D viewport**
+2. Open `scripts/extract_camera_params.py` in the Scripting tab
+3. Set `MODE = 'viewport'` and run the script
+4. The printed `cam_obj.location` and `cam_obj.rotation_euler` lines are saved
+   to a **CameraParams** text block in the Text Editor
+5. Paste those two lines into the camera section of your render script
+
+> **macOS tip:** Launch Blender from Terminal to see `print()` output:
+> ```bash
+> /Applications/Blender.app/Contents/MacOS/Blender
+> ```
+
+---
+
+## How the resampling works
+
+The 3D brain mesh vertices are stored in **Allen CCF µm coordinates**:
+
+```
+axis 0 = AP   (0 – 13 200 µm)   ←→   image rows
+axis 1 = DV   (0 –  5 350 µm)   ←→   depth (not used for 2D lookup)
+axis 2 = ML   (0 – 11 400 µm)   ←→   image columns
 ```
 
-## Notes
+For each vertex, its `(axis 0, axis 2)` position is used to look up the
+corresponding pixel in the 2D phase/density image via bilinear interpolation
+(`scipy.interpolate.RegularGridInterpolator`).  Because the image is already
+registered to the same CCF coordinate space, no additional alignment is needed.
 
-- The render script is the "metallic / iridescent" style (transparent brain
-  shell with a Fresnel color shift, emissive phase cortex, dorsal outline hull).
-  Material, lighting, and camera parameters are grouped at the top for tuning.
-- `02_phasemap_to_vertex_colors.py` can be adapted to other scalar overlays
-  (for example a spiral density map) by swapping the per-vertex value source
-  before the colormap step.
-- Coordinate conventions (which CCF axis is AP vs ML vs depth) must match your
-  own registration. Verify before trusting the overlay alignment.
+---
+
+## File reference
+
+```
+rotating-wave-brain-render/
+├── notebooks/
+│   └── phase_colormap_workflow.py   # Full pipeline from .mat files to vertex colors
+├── scripts/
+│   ├── 01_export_brain_meshes.py    # Download atlas and export .obj meshes
+│   ├── 02_phasemap_to_vertex_colors.py   # Phase RGB image → vertex_colors.npy
+│   ├── 02b_density_to_vertex_colors.py  # Spiral density → vertex_colors_density.npy
+│   ├── 03_render_blender.py         # Blender: metallic/iridescent, phase map
+│   ├── 03b_render_matte.py          # Blender: matte/scientific style
+│   ├── 03c_render_density_scatter.py # Blender: scatter dots on iridescent brain
+│   └── extract_camera_params.py     # Blender: capture viewport or scene camera angle
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Troubleshooting
+
+**Colors look misaligned on the brain**
+→ Open `interpolation_check.png` (produced by the notebook workflow).  The
+colored region should match the dorsal cortex outline.  If not, check that
+`phase_colormap.mat` is registered to the Allen CCF 25 µm dorsal projection.
+
+**"No module named bpy" error**
+→ The Blender scripts (`03_*.py`, `extract_camera_params.py`) must be run
+*inside* Blender, not from the terminal.
+
+**Atlas download fails**
+→ Check your internet connection.  The atlas is cached after the first download
+in `~/.brainglobe/`.  Delete that folder to force a re-download.
+
+**Blender renders a black or gray cortex**
+→ Make sure `vertex_colors.npy` exists in `data_dir` and that the path is set
+correctly at the top of the render script.
