@@ -26,8 +26,8 @@ Run in a normal Python env (NOT inside Blender):
 
 import numpy as np
 import trimesh
+import mat73
 from scipy.interpolate import RegularGridInterpolator
-from scipy.io import loadmat
 
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
@@ -44,10 +44,7 @@ ML_MIN, ML_MAX  = 0.0, 11400.0   # 1140 px × 10 µm/px
 # CCF axis mapping for isocortex.obj (axis 0 = AP, 1 = DV, 2 = ML).
 AP_AXIS = 0
 ML_AXIS = 2
-DV_AXIS = 1
-
-# Vertex must face dorsally (DV normal component above threshold) to be painted.
-DORSAL_NORMAL_THRESH = 0.3
+DV_AXIS = 1   # unused but kept for reference
 
 # Interpolated alpha at/above this counts as "inside the cortical mask".
 ALPHA_THRESH = 0.5
@@ -63,11 +60,11 @@ normals  = mesh.vertex_normals  # (N, 3)
 # 2. LOAD RGBA PHASE IMAGE
 # ---------------------------------------------------------------------------
 if PHASE_RGBA_PATH.endswith(".mat"):
-    mat = loadmat(PHASE_RGBA_PATH)
+    mat = mat73.loadmat(PHASE_RGBA_PATH)
     if RGBA_VAR_NAME not in mat:
         raise KeyError(
             f"'{RGBA_VAR_NAME}' not found in {PHASE_RGBA_PATH}. "
-            f"Variables present: {[k for k in mat if not k.startswith('__')]}"
+            f"Variables present: {list(mat.keys())}"
         )
     rgba = np.asarray(mat[RGBA_VAR_NAME], dtype=float)
 else:
@@ -102,10 +99,9 @@ a = interp_a(query)
 # ---------------------------------------------------------------------------
 # 4. VALIDITY: inside image AND inside mask AND dorsal-facing
 # ---------------------------------------------------------------------------
-in_fov      = ~np.isnan(r)
-in_mask     = np.nan_to_num(a, nan=0.0) >= ALPHA_THRESH
-dorsal_face = normals[:, DV_AXIS] > DORSAL_NORMAL_THRESH
-valid       = in_fov & in_mask & dorsal_face
+in_fov  = ~np.isnan(r)
+in_mask = np.nan_to_num(a, nan=0.0) >= ALPHA_THRESH
+valid   = in_fov & in_mask
 
 # ---------------------------------------------------------------------------
 # 5. ASSEMBLE AND SAVE
