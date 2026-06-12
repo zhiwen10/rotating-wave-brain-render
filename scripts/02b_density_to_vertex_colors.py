@@ -3,19 +3,20 @@ Step 2b: Convert spiral-detection density data into per-vertex RGBA colors for
 the isocortex mesh, saved as vertex_colors_density.npy.
 
 INPUT FORMAT:
-    unique_spirals.npy  —  shape (N, 3), columns [AP_um, ML_um, density].
-    Column 2 is the pre-computed density value for each detected spiral event
-    (e.g. from spiral_density.mat).  Convert with mat73 if starting from .mat:
+    unique_spirals.npy  —  shape (N, 3), columns [ML_voxel, AP_voxel, density].
+    Columns 0 and 1 are voxel indices in the 10 µm CCF space (multiply by 10
+    to get µm).  Column 2 is the pre-computed density value.
+    Convert from spiral_density.mat with mat73:
         import mat73, numpy as np
         d = mat73.loadmat("spiral_density.mat")
         np.save("unique_spirals.npy", np.array(d["unique_spirals"], dtype=np.float32))
 
 Pipeline:
-    1. Bin (AP, ML) coordinates into a 2D histogram, weighted by density column.
-    2. Smooth with a Gaussian kernel for visual quality.
+    1. Scale voxel indices → µm (×10).
+    2. Interpolate scattered (AP, ML, density) onto a regular 2D grid with griddata.
     3. Apply the 'hot' colormap (black → red → yellow → white).
-    4. Interpolate per-vertex, identical to 02_phasemap_to_vertex_colors.py.
-    5. Save vertex_colors_density.npy (N, 4) RGBA, float32.
+    4. Interpolate RGB image onto mesh vertices (same as 02_phasemap_to_vertex_colors.py).
+    5. Save vertex_colors_density.npy — shape (N, 4) RGBA, float32.
 
 Run in a normal Python env (NOT inside Blender):
     pip install trimesh scipy matplotlib numpy
@@ -24,106 +25,79 @@ Run in a normal Python env (NOT inside Blender):
 
 import numpy as np
 import trimesh
-from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter
+from scipy.interpolate import RegularGridInterpolator, griddata
 import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
 # ---------------------------------------------------------------------------
-MESH_PATH      = "isocortex.obj"
-SPIRALS_PATH   = "unique_spirals.npy"       # (N, 3): [AP_um, ML_um, density]
-OUT_PATH       = "vertex_colors_density.npy"
+MESH_PATH    = "isocortex.obj"
+SPIRALS_PATH = "unique_spirals.npy"        # (N, 3): [ML_voxel, AP_voxel, density]
+OUT_PATH     = "vertex_colors_density.npy"
 
-# Density image resolution (pixels per axis, matched to 25 μm atlas)
-AP_BINS        = 1320
-ML_BINS        = 1140
-AP_TOTAL_UM    = 13200.0
-ML_TOTAL_UM    = 11400.0
+AP_BINS      = 1320
+ML_BINS      = 1140
+AP_TOTAL_UM  = 13200.0
+ML_TOTAL_UM  = 11400.0
 
-AP_AXIS        = 0   # vertices[:, AP_AXIS] is the AP coordinate
-ML_AXIS        = 2   # vertices[:, ML_AXIS] is the ML coordinate
-DV_AXIS        = 1   # used for optional dorsal-facing mask
-
-# Gaussian smoothing kernel width in pixels (increase for smoother map)
-SMOOTH_SIGMA   = 8.0
-
-CMAP           = "hot"   # matplotlib colormap: 'hot', 'inferno', 'viridis', …
-DORSAL_THRESH  = 0.3     # set to 0 to disable ventral masking
-GRAY           = [0.15, 0.15, 0.15, 1.0]
+CMAP         = "hot"
+GRAY         = [0.0, 0.0, 0.0, 1.0]   # black for out-of-FOV (matches hot low end)
 
 # ---------------------------------------------------------------------------
-# 1. LOAD MESH + SPIRAL COORDINATES
+# 1. LOAD MESH
 # ---------------------------------------------------------------------------
-mesh        = trimesh.load(MESH_PATH)
-vertices    = mesh.vertices        # (N, 3) in CCF μm
-normals     = mesh.vertex_normals  # (N, 3)
-
-spirals     = np.load(SPIRALS_PATH)   # (N, 3)
-ap_pts      = spirals[:, 0]
-ml_pts      = spirals[:, 1]
-density_wts = spirals[:, 2]           # pre-computed density value per point
+mesh     = trimesh.load(MESH_PATH)
+vertices = mesh.vertices        # (N, 3) in CCF µm
 
 # ---------------------------------------------------------------------------
-# 2. BUILD 2D DENSITY IMAGE VIA WEIGHTED HISTOGRAM + SMOOTHING
+# 2. LOAD SPIRAL COORDINATES AND SCALE TO µm
 # ---------------------------------------------------------------------------
-ap_edges = np.linspace(0, AP_TOTAL_UM, AP_BINS + 1)
-ml_edges = np.linspace(0, ML_TOTAL_UM, ML_BINS + 1)
-
-# weights=density_wts: each point contributes its density value to the bin
-# rather than a count of 1, so the pre-computed density is preserved.
-density_img, _, _ = np.histogram2d(ap_pts, ml_pts,
-                                   bins=[ap_edges, ml_edges],
-                                   weights=density_wts)
-density_img       = gaussian_filter(density_img, sigma=SMOOTH_SIGMA)
+spirals = np.load(SPIRALS_PATH)   # (N, 3)
+# col0 = ML voxel index, col1 = AP voxel index, col2 = density
+ml_pts  = spirals[:, 0] * 10     # ML voxels → µm
+ap_pts  = spirals[:, 1] * 10     # AP voxels → µm
+density = spirals[:, 2]
 
 # ---------------------------------------------------------------------------
-# 3. APPLY COLORMAP → RGB IMAGE
+# 3. INTERPOLATE SCATTER → REGULAR 2D GRID
 # ---------------------------------------------------------------------------
-d_min, d_max  = density_img.min(), density_img.max()
-density_norm  = (density_img - d_min) / (d_max - d_min + 1e-12)
+ap_axis = np.linspace(0, AP_TOTAL_UM, AP_BINS)
+ml_axis = np.linspace(0, ML_TOTAL_UM, ML_BINS)
+Xq, Yq = np.meshgrid(ap_axis, ml_axis, indexing='ij')   # (AP, ML) grid
 
-cmap          = plt.cm.get_cmap(CMAP)
-rgb_img       = cmap(density_norm)[:, :, :3].astype(np.float32)  # drop alpha
+density_map = griddata((ml_pts, ap_pts), density,
+                        (Xq, Yq), method='linear', fill_value=0)
 
 # ---------------------------------------------------------------------------
-# 4. BUILD PER-CHANNEL INTERPOLATORS
+# 4. APPLY HOT COLORMAP
 # ---------------------------------------------------------------------------
-ap_coords = np.linspace(0, AP_TOTAL_UM, AP_BINS)
-ml_coords = np.linspace(0, ML_TOTAL_UM, ML_BINS)
+d_min, d_max  = density_map.min(), density_map.max()
+density_norm  = np.clip((density_map - d_min) / (d_max - d_min + 1e-12), 0, 1)
 
-def make_interp(channel):
+cmap    = plt.colormaps["hot"]
+rgb_img = cmap(density_norm)[:, :, :3].astype(np.float32)   # (AP, ML, 3)
+
+# ---------------------------------------------------------------------------
+# 5. INTERPOLATE RGB IMAGE ONTO MESH VERTICES
+# ---------------------------------------------------------------------------
+def make_interp(ch):
     return RegularGridInterpolator(
-        (ap_coords, ml_coords),
-        rgb_img[:, :, channel],
-        method="linear",
-        bounds_error=False,
-        fill_value=np.nan,
-    )
+        (ap_axis, ml_axis), rgb_img[:, :, ch],
+        method="linear", bounds_error=False, fill_value=np.nan)
 
-interp_r = make_interp(0)
-interp_g = make_interp(1)
-interp_b = make_interp(2)
+query = np.column_stack([vertices[:, 0], vertices[:, 2]])   # (AP, ML) per vertex
+r = make_interp(0)(query)
+g = make_interp(1)(query)
+b = make_interp(2)(query)
 
 # ---------------------------------------------------------------------------
-# 5. QUERY EACH VERTEX
+# 6. ASSEMBLE AND SAVE
 # ---------------------------------------------------------------------------
-query = np.column_stack([vertices[:, AP_AXIS], vertices[:, ML_AXIS]])
-r = interp_r(query)
-g = interp_g(query)
-b = interp_b(query)
-
-# ---------------------------------------------------------------------------
-# 6. MASK & SAVE
-# ---------------------------------------------------------------------------
-out_of_fov = np.isnan(r)
-non_dorsal = normals[:, DV_AXIS] < DORSAL_THRESH
-invalid    = out_of_fov   # swap to `out_of_fov | non_dorsal` to also mask ventral
-
-vertex_colors           = np.column_stack([r, g, b, np.ones(len(vertices))])
-vertex_colors[invalid]  = GRAY
-vertex_colors           = np.clip(vertex_colors, 0.0, 1.0).astype(np.float32)
+invalid       = np.isnan(r)
+vertex_colors = np.column_stack([r, g, b, np.ones(len(vertices))])
+vertex_colors[invalid] = GRAY
+vertex_colors = np.clip(vertex_colors, 0.0, 1.0).astype(np.float32)
 
 np.save(OUT_PATH, vertex_colors)
-print(f"wrote {OUT_PATH}  shape={vertex_colors.shape}  "
-      f"({(~invalid).sum()} / {len(vertices)} vertices colored)")
+print(f"Saved {OUT_PATH}  shape={vertex_colors.shape}  "
+      f"({(~invalid).sum()}/{len(vertices)} vertices colored)")

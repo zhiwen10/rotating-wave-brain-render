@@ -5,48 +5,47 @@ import trimesh
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter
+from scipy.interpolate import RegularGridInterpolator, griddata
 
 SAMPLE = "sample_data"
 AP_BINS, ML_BINS = 1320, 1140
 AP_UM, ML_UM     = 13200.0, 11400.0
-SMOOTH_SIGMA     = 8.0
-GRAY             = [0.15, 0.15, 0.15, 1.0]
+GRAY             = [0.0, 0.0, 0.0, 1.0]
 
 # ── 1. Convert spiral_density.mat → unique_spirals.npy ───────────────────
 data = mat73.loadmat(f"{SAMPLE}/spiral_density.mat")
 s = np.array(data["unique_spirals"], dtype=np.float32)
-s[:, 0] *= 10   # AP pixel indices → µm  (10 µm per pixel)
-s[:, 1] *= 10   # ML pixel indices → µm
+# Columns: [ML_voxel, AP_voxel, density]  (voxel indices in 10 µm CCF space)
 np.save(f"{SAMPLE}/unique_spirals.npy", s)
-print(f"unique_spirals: AP {s[:,0].min():.0f}–{s[:,0].max():.0f} µm  "
-      f"ML {s[:,1].min():.0f}–{s[:,1].max():.0f} µm")
+ml_pts  = s[:, 0] * 10   # ML voxels → µm
+ap_pts  = s[:, 1] * 10   # AP voxels → µm
+density = s[:, 2]
+print(f"unique_spirals: AP {ap_pts.min():.0f}–{ap_pts.max():.0f} µm  "
+      f"ML {ml_pts.min():.0f}–{ml_pts.max():.0f} µm")
 
-# ── 2. Build density image from weighted histogram ────────────────────────
-ap_edges = np.linspace(0, AP_UM, AP_BINS + 1)
-ml_edges = np.linspace(0, ML_UM, ML_BINS + 1)
-density_img, _, _ = np.histogram2d(s[:,0], s[:,1],
-                                   bins=[ap_edges, ml_edges],
-                                   weights=s[:,2])
-density_img = gaussian_filter(density_img, sigma=SMOOTH_SIGMA)
-density_norm = (density_img - density_img.min()) / (density_img.max() - density_img.min() + 1e-12)
-rgb_density = plt.cm.get_cmap("hot")(density_norm)[:, :, :3].astype(np.float32)
+# ── 2. Interpolate scattered density → regular 2D grid ───────────────────
+ap_axis = np.linspace(0, AP_UM, AP_BINS)
+ml_axis = np.linspace(0, ML_UM, ML_BINS)
+Xq, Yq = np.meshgrid(ap_axis, ml_axis, indexing='ij')
 
-# ── 3. Interpolate density onto mesh vertices ─────────────────────────────
+density_map  = griddata((ml_pts, ap_pts), density,
+                         (Xq, Yq), method='linear', fill_value=0)
+density_norm = np.clip((density_map - density_map.min()) /
+                       (density_map.max() - density_map.min() + 1e-12), 0, 1)
+rgb_density  = plt.colormaps["hot"](density_norm)[:, :, :3].astype(np.float32)
+
+# ── 3. Interpolate density RGB onto mesh vertices ─────────────────────────
 mesh     = trimesh.load(f"{SAMPLE}/isocortex.obj")
 vertices = mesh.vertices
-ap_coords = np.linspace(0, AP_UM, AP_BINS)
-ml_coords = np.linspace(0, ML_UM, ML_BINS)
-query = np.column_stack([vertices[:, 0], vertices[:, 2]])
+query    = np.column_stack([vertices[:, 0], vertices[:, 2]])   # (AP, ML)
 
-def interp_channel(img, ch):
+def interp_ch(img, ch):
     return RegularGridInterpolator(
-        (ap_coords, ml_coords), img[:, :, ch],
+        (ap_axis, ml_axis), img[:, :, ch],
         method="linear", bounds_error=False, fill_value=np.nan)(query)
 
-r, g, b = interp_channel(rgb_density, 0), interp_channel(rgb_density, 1), interp_channel(rgb_density, 2)
-invalid = np.isnan(r)
+r, g, b = interp_ch(rgb_density, 0), interp_ch(rgb_density, 1), interp_ch(rgb_density, 2)
+invalid    = np.isnan(r)
 vc_density = np.column_stack([r, g, b, np.ones(len(vertices))])
 vc_density[invalid] = GRAY
 vc_density = np.clip(vc_density, 0.0, 1.0).astype(np.float32)
