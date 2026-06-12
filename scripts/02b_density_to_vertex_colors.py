@@ -1,39 +1,37 @@
 """
 Step 2b: Convert spiral-detection density data into per-vertex RGBA colors for
-the isocortex mesh, saved as vertex_colors_density.npy.
+the isocortex mesh, saved as processed_data/vertex_colors_density.npy.
 
 INPUT FORMAT:
-    unique_spirals.npy  —  shape (N, 3), columns [ML_voxel, AP_voxel, density].
-    Columns 0 and 1 are voxel indices in the 10 µm CCF space (multiply by 10
-    to get µm).  Column 2 is the pre-computed density value.
-    Convert from spiral_density.mat with mat73:
-        import mat73, numpy as np
-        d = mat73.loadmat("spiral_density.mat")
-        np.save("unique_spirals.npy", np.array(d["unique_spirals"], dtype=np.float32))
+    raw_data/spiral_density.mat  —  contains unique_spirals array, shape (N, 3):
+        column 0 = ML voxel index (10 µm CCF space)
+        column 1 = AP voxel index (10 µm CCF space)
+        column 2 = pre-computed density value
 
 Pipeline:
-    1. Scale voxel indices → µm (×10).
+    1. Load spiral_density.mat and scale voxel indices → µm (×10).
     2. Interpolate scattered (AP, ML, density) onto a regular 2D grid with griddata.
     3. Apply the 'hot' colormap (black → red → yellow → white).
     4. Interpolate RGB image onto mesh vertices (same as 02_phasemap_to_vertex_colors.py).
     5. Save vertex_colors_density.npy — shape (N, 4) RGBA, float32.
 
 Run in a normal Python env (NOT inside Blender):
-    pip install trimesh scipy matplotlib numpy
+    pip install trimesh scipy matplotlib numpy mat73
     python 02b_density_to_vertex_colors.py
 """
 
 import numpy as np
 import trimesh
+import mat73
 from scipy.interpolate import RegularGridInterpolator, griddata
 import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
 # ---------------------------------------------------------------------------
-MESH_PATH    = "isocortex.obj"
-SPIRALS_PATH = "unique_spirals.npy"        # (N, 3): [ML_voxel, AP_voxel, density]
-OUT_PATH     = "vertex_colors_density.npy"
+MESH_PATH    = "raw_data/isocortex.obj"
+SPIRALS_PATH = "raw_data/spiral_density.mat"   # contains unique_spirals (N, 3)
+OUT_PATH     = "processed_data/vertex_colors_density.npy"
 
 AP_BINS      = 1320
 ML_BINS      = 1140
@@ -52,7 +50,8 @@ vertices = mesh.vertices        # (N, 3) in CCF µm
 # ---------------------------------------------------------------------------
 # 2. LOAD SPIRAL COORDINATES AND SCALE TO µm
 # ---------------------------------------------------------------------------
-spirals = np.load(SPIRALS_PATH)   # (N, 3)
+data    = mat73.loadmat(SPIRALS_PATH)
+spirals = np.array(data["unique_spirals"], dtype=np.float32)   # (N, 3)
 # col0 = ML voxel index, col1 = AP voxel index, col2 = density
 ml_pts  = spirals[:, 0] * 10     # ML voxels → µm
 ap_pts  = spirals[:, 1] * 10     # AP voxels → µm

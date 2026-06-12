@@ -49,9 +49,9 @@ from scipy.interpolate import RegularGridInterpolator
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
 # ---------------------------------------------------------------------------
-MESH_PATH       = "isocortex.obj"
-PHASE_RGB_PATH  = "phase_colormap.npy"  # (H, W, 3) float32 in [0, 1]
-OUT_PATH        = "vertex_colors.npy"
+MESH_PATH       = "raw_data/isocortex.obj"
+PHASE_RGB_PATH  = "raw_data/phase_colormap.npy"   # (H, W, 3) float32 in [0, 1]
+OUT_PATH        = "processed_data/vertex_colors.npy"
 
 # Allen CCF 25 μm atlas total extents (μm).
 # H×W of phase_colormap.npy must equal (AP_BINS, ML_BINS).

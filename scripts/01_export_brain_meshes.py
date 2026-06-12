@@ -19,8 +19,8 @@ locally, so subsequent runs are fast.
 import os
 from brainglobe_atlasapi import BrainGlobeAtlas
 
-# ---- Output directory (EDIT THIS to match your Blender data_dir) ----
-OUT_DIR = "."
+# ---- Output directory ----
+OUT_DIR = "raw_data"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # 25um atlas is a good balance of detail vs mesh size.
@@ -41,4 +41,4 @@ for acronym, fname in structures:
     mesh.write(out_path)
     print(f"wrote {out_path}")
 
-print("done. Copy root.obj and isocortex.obj into your Blender data_dir.")
+print("done. root.obj and isocortex.obj are in raw_data/.")
