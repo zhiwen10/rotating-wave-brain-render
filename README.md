@@ -110,10 +110,11 @@ and saves `sample_data/vertex_colors.npy`.
 2. Open a render script, set `data_dir` to your `sample_data/` folder
 3. Press **▶ Run Script** (or **Alt+P**)
 
-| Script | Runs on | Style | Output |
-|--------|---------|-------|--------|
-| `scripts/03_render_blender.py` | Blender | Metallic / iridescent | `render_metallic.png` |
-| `scripts/03b_render_matte.py` | Blender | Matte / scientific | `render_matte.png` |
+| Script | Runs on | Style | Input | Output |
+|--------|---------|-------|-------|--------|
+| `scripts/03_render_blender.py` | Blender | Metallic / iridescent | `vertex_colors.npy` | `render_metallic.png` |
+| `scripts/03b_render_matte.py` | Blender | Matte / scientific | `vertex_colors.npy` | `render_matte.png` |
+| `scripts/03c_render_density.py` | Blender | Metallic / density map | `vertex_colors_density.npy` | `render_density.png` |
 
 ---
 
