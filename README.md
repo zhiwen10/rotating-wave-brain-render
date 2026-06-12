@@ -57,7 +57,7 @@ pip install trimesh scipy matplotlib numpy mat73 jupyter
 Step 1                    Step 2                         Step 3
 ──────────────────────    ──────────────────────────     ──────────────────────────
 01_export_brain_meshes.py  02_prepare_for_blender.ipynb   03_render_blender.py
-                           02b_density_to_vertex_colors.py  03c_render_density.py
+                           02b_density_to_vertex_colors.py  03b_render_density.py
 runs on: Python            runs on: Python (Jupyter/CLI)  runs on: Blender (built-in Python)
 uses:    brainglobe-       uses:    trimesh, scipy,        uses:    bpy (Blender API)
          atlasapi                   numpy, matplotlib,
@@ -126,7 +126,7 @@ Loads `spiral_density.mat` from `raw_data/` and saves
 | Script | Style | Input | Output |
 |--------|-------|-------|--------|
 | `scripts/03_render_blender.py` | Metallic / iridescent | `processed_data/vertex_colors.npy` | `processed_data/render_metallic.png` |
-| `scripts/03c_render_density.py` | Metallic / density map | `processed_data/vertex_colors_density.npy` | `processed_data/render_density.png` |
+| `scripts/03b_render_density.py` | Metallic / density map | `processed_data/vertex_colors_density.npy` | `processed_data/render_density.png` |
 
 ---
 
@@ -149,7 +149,7 @@ Loads `spiral_density.mat` from `raw_data/` and saves
 | `vertex_colors_density.npy` | `02b_density_to_vertex_colors.py` | Per-vertex RGBA density colors |
 | `render_metallic.png` | `03_render_blender.py` | 3D render — metallic style |
 | `render_matte.png` | `03b_render_matte.py` | 3D render — matte style |
-| `render_density.png` | `03c_render_density.py` | 3D render — density map |
+| `render_density.png` | `03b_render_density.py` | 3D render — density map |
 
 ---
 
