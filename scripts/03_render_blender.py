@@ -30,8 +30,8 @@ import math
 # CONFIGURATION — edit these before running
 # ============================================================================
 
-raw_data_dir       = "/path/to/raw_data"         # ← OBJ mesh files
-processed_data_dir = "/path/to/processed_data"   # ← vertex colors & render output
+raw_data_dir       = os.environ.get("RAW_DATA_DIR",       "/path/to/raw_data")        # ← OBJ mesh files
+processed_data_dir = os.environ.get("PROCESSED_DATA_DIR", "/path/to/processed_data")  # ← vertex colors & render output
 VERTEX_COLORS_FILE = "vertex_colors.npy"          # phase map colors per vertex
 
 SAVE_RENDER   = True

@@ -5,11 +5,12 @@
 *.blend
 *.blend1
 
-# Allow sample_data files (committed as reference data)
-!sample_data/*.obj
-!sample_data/*.npy
-!sample_data/*.mat
-!sample_data/*.png
+# Allow raw_data and processed_data files (committed as reference data)
+!raw_data/*.obj
+!raw_data/*.npy
+!raw_data/*.mat
+!processed_data/*.npy
+!processed_data/*.png
 
 # Atlas cache
 .brainglobe/

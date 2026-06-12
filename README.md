@@ -130,6 +130,14 @@ Loads `spiral_density.mat` from `raw_data/` and saves
 
 ---
 
+## Example output
+
+| Phase map | Spiral density map |
+|:---------:|:-----------------:|
+| ![Phase map render](processed_data/render_metallic.png) | ![Density map render](processed_data/render_density.png) |
+
+---
+
 ## Data folders
 
 ### `raw_data/` — inputs (provided in this repo)
@@ -147,9 +155,8 @@ Loads `spiral_density.mat` from `raw_data/` and saves
 |------|-------------|-------------|
 | `vertex_colors.npy` | Step 2 notebook | Per-vertex RGBA phase colors |
 | `vertex_colors_density.npy` | `02b_density_to_vertex_colors.py` | Per-vertex RGBA density colors |
-| `render_metallic.png` | `03_render_blender.py` | 3D render — metallic style |
-| `render_matte.png` | `03b_render_matte.py` | 3D render — matte style |
-| `render_density.png` | `03b_render_density.py` | 3D render — density map |
+| `render_metallic.png` | `03_render_blender.py` | 3D render — phase map, metallic style |
+| `render_density.png` | `03b_render_density.py` | 3D render — density map, metallic style |
 
 ---
 
