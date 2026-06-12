@@ -117,16 +117,28 @@ and saves `sample_data/vertex_colors.npy`.
 
 ---
 
+## Example output
+
+Top-down (AP × ML) vertex color maps — the same colors are applied to the 3D brain surface in Blender.
+
+| Phase map | Spiral density map |
+|:---------:|:-----------------:|
+| ![Phase map](sample_data/preview_phase.png) | ![Density map](sample_data/preview_density.png) |
+
+---
+
 ## Sample data
 
 `sample_data/` contains everything needed to run Steps 2 and 3 out of the box:
 
 | File | Description |
 |------|-------------|
-| `phase_colormap.npy` | 2D phase map, shape `(1320, 1140, 3)` RGB, registered to Allen CCF 25 µm |
+| `phase_colormap.npy` | 2D phase map, shape `(1320, 1140, 3)` RGB, registered to Allen CCF |
+| `spiral_density.mat` | Spiral event coordinates and density, shape `(N, 3)`: AP, ML (pixel indices), density |
 | `isocortex.obj` | Dorsal isocortex surface mesh |
 | `root.obj` | Whole-brain outer shell |
-| `vertex_colors.npy` | Per-vertex RGBA colors (output of Step 2, provided for convenience) |
+| `vertex_colors.npy` | Per-vertex RGBA phase colors (output of Step 2, provided for convenience) |
+| `vertex_colors_density.npy` | Per-vertex RGBA density colors (output of Step 2b, provided for convenience) |
 
 ---
 

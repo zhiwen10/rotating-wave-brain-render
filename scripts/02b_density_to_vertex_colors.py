@@ -3,12 +3,15 @@ Step 2b: Convert spiral-detection density data into per-vertex RGBA colors for
 the isocortex mesh, saved as vertex_colors_density.npy.
 
 INPUT FORMAT:
-    unique_spirals.npy  —  shape (N, 3), columns [AP_um, ML_um, density_count].
-    These are the detected spiral event coordinates (in Allen CCF μm) together
-    with a per-event density or count weight.
+    unique_spirals.npy  —  shape (N, 3), columns [AP_um, ML_um, density].
+    Column 2 is the pre-computed density value for each detected spiral event
+    (e.g. from spiral_density.mat).  Convert with mat73 if starting from .mat:
+        import mat73, numpy as np
+        d = mat73.loadmat("spiral_density.mat")
+        np.save("unique_spirals.npy", np.array(d["unique_spirals"], dtype=np.float32))
 
 Pipeline:
-    1. Bin (AP, ML) coordinates into a 2D histogram in CCF space.
+    1. Bin (AP, ML) coordinates into a 2D histogram, weighted by density column.
     2. Smooth with a Gaussian kernel for visual quality.
     3. Apply the 'hot' colormap (black → red → yellow → white).
     4. Interpolate per-vertex, identical to 02_phasemap_to_vertex_colors.py.
@@ -59,14 +62,19 @@ normals     = mesh.vertex_normals  # (N, 3)
 spirals     = np.load(SPIRALS_PATH)   # (N, 3)
 ap_pts      = spirals[:, 0]
 ml_pts      = spirals[:, 1]
+density_wts = spirals[:, 2]           # pre-computed density value per point
 
 # ---------------------------------------------------------------------------
-# 2. BUILD 2D DENSITY IMAGE VIA HISTOGRAM + SMOOTHING
+# 2. BUILD 2D DENSITY IMAGE VIA WEIGHTED HISTOGRAM + SMOOTHING
 # ---------------------------------------------------------------------------
 ap_edges = np.linspace(0, AP_TOTAL_UM, AP_BINS + 1)
 ml_edges = np.linspace(0, ML_TOTAL_UM, ML_BINS + 1)
 
-density_img, _, _ = np.histogram2d(ap_pts, ml_pts, bins=[ap_edges, ml_edges])
+# weights=density_wts: each point contributes its density value to the bin
+# rather than a count of 1, so the pre-computed density is preserved.
+density_img, _, _ = np.histogram2d(ap_pts, ml_pts,
+                                   bins=[ap_edges, ml_edges],
+                                   weights=density_wts)
 density_img       = gaussian_filter(density_img, sigma=SMOOTH_SIGMA)
 
 # ---------------------------------------------------------------------------

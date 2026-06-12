@@ -9,6 +9,7 @@
 !sample_data/*.obj
 !sample_data/*.npy
 !sample_data/*.mat
+!sample_data/*.png
 
 # Atlas cache
 .brainglobe/
