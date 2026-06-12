@@ -116,14 +116,19 @@ so you only need to run the preparation notebook once with your own data.
 - **Blender 3.x or 4.x** — [download here](https://www.blender.org/download/)
   (NumPy is bundled with Blender's Python, no extra install needed inside Blender)
 
-### Your data file
+### Sample data
+
+All files needed to run the pipeline are provided in `sample_data/`:
 
 | File | Description |
 |------|-------------|
-| `phase_colormap.npy` | 2D phase map as an RGB image, registered to Allen CCF. Shape `(1320, 1140, 3)`, float32 in `[0, 1]`. Cyclic colormap already applied in your analysis pipeline. |
+| `phase_colormap.npy` | 2D phase map as an RGB image, registered to Allen CCF. Shape `(1320, 1140, 3)`, float32 in `[0, 1]`. This is the source data — the notebook processes it into vertex colors. |
+| `isocortex.obj` | 3D surface mesh of the dorsal isocortex (Allen CCF 25 µm). |
+| `root.obj` | 3D surface mesh of the whole-brain outer shell (Allen CCF 25 µm). |
+| `spiral_density.mat` | Detected spiral event coordinates, for the density scatter render. |
 
-> Brain mesh files (`root.obj`, `isocortex.obj`) are already provided in
-> `sample_data/` — you do not need to download the atlas.
+To use your own phase map, replace `PHASE_COLORMAP_PATH` in the notebook with
+the path to your file.
 
 ---
 
@@ -207,9 +212,9 @@ capture a new angle:
 ```
 rotating-wave-brain-render/
 ├── sample_data/                          ← provided, ready to use
+│   ├── phase_colormap.npy                #   2D phase map (source data, registered to CCF)
 │   ├── root.obj                          #   whole-brain outer shell
 │   ├── isocortex.obj                     #   dorsal cortex surface mesh
-│   ├── vertex_colors.npy                 #   pre-computed phase colors (sample)
 │   └── spiral_density.mat                #   spiral event coordinates
 │
 ├── notebooks/
