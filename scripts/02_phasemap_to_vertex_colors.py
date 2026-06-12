@@ -14,10 +14,10 @@ Pipeline:
     1. Load isocortex.obj vertices (N, 3) in Allen CCF µm.
     2. Load phase_colormap.mat → rgbaImage (H x W x 4), RGB + mask alpha.
     3. Interpolate R, G, B, A per vertex at each vertex's (AP, ML) position.
-    4. A vertex is valid only if it is inside the image, inside the mask
-       (alpha ≥ threshold), AND facing dorsally. Invalid vertices get alpha 0
-       so the Blender material renders them as transparent.
-    5. Save vertex_colors.npy — shape (N, 4) RGBA, float32.
+    4. Blend each vertex color: phase_color × alpha + white × (1 − alpha).
+       This bakes the mask boundary directly into the color — no transparency
+       needed in Blender.
+    5. Save vertex_colors.npy — shape (N, 4) RGBA float32, all alpha = 1.
 
 Run in a normal Python env (NOT inside Blender):
     pip install trimesh scipy numpy
@@ -28,6 +28,7 @@ import numpy as np
 import trimesh
 import mat73
 from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import gaussian_filter
 
 # ---------------------------------------------------------------------------
 # CONFIG (EDIT THESE)
@@ -46,8 +47,12 @@ AP_AXIS = 0
 ML_AXIS = 2
 DV_AXIS = 1   # unused but kept for reference
 
-# Interpolated alpha at/above this counts as "inside the cortical mask".
-ALPHA_THRESH = 0.5
+# Gaussian blur radius (pixels) applied to the mask alpha before interpolation.
+# Larger values produce smoother, more rounded edges where the phase map meets white.
+MASK_SMOOTH_SIGMA = 30
+
+# Color for vertices outside the cortical mask (blended in at mask boundaries).
+OUTSIDE_COLOR = [1.0, 1.0, 1.0]   # white
 
 # ---------------------------------------------------------------------------
 # 1. LOAD MESH
@@ -73,6 +78,10 @@ else:
 if rgba.ndim != 3 or rgba.shape[2] != 4:
     raise ValueError(f"Expected H x W x 4 RGBA image, got {rgba.shape}")
 
+# Smooth the mask alpha to produce clean, rounded edges at the mask boundary.
+rgba = rgba.copy()
+rgba[:, :, 3] = gaussian_filter(rgba[:, :, 3].astype(float), sigma=MASK_SMOOTH_SIGMA)
+
 # ---------------------------------------------------------------------------
 # 3. PER-CHANNEL INTERPOLATORS
 # ---------------------------------------------------------------------------
@@ -97,22 +106,19 @@ b = interp_b(query)
 a = interp_a(query)
 
 # ---------------------------------------------------------------------------
-# 4. VALIDITY: inside image AND inside mask AND dorsal-facing
+# 4. BLEND: phase_color × alpha + white × (1 - alpha)
+#    All vertices get alpha=1 — the mask boundary is baked into the RGB color.
 # ---------------------------------------------------------------------------
-in_fov  = ~np.isnan(r)
-in_mask = np.nan_to_num(a, nan=0.0) >= ALPHA_THRESH
-valid   = in_fov & in_mask
+alpha_w = np.nan_to_num(a, nan=0.0).clip(0, 1)   # per-vertex blend weight
+rgb     = np.nan_to_num(np.column_stack([r, g, b]), nan=0.0)
+outside = np.array(OUTSIDE_COLOR, dtype=np.float32)
+
+blended         = rgb * alpha_w[:, None] + outside * (1.0 - alpha_w[:, None])
+vertex_colors   = np.column_stack([blended, np.ones(len(vertices))]).astype(np.float32)
+vertex_colors   = np.clip(vertex_colors, 0.0, 1.0)
 
 # ---------------------------------------------------------------------------
-# 5. ASSEMBLE AND SAVE
+# 5. SAVE
 # ---------------------------------------------------------------------------
-vertex_colors          = np.zeros((len(vertices), 4), dtype=np.float32)
-rgb                    = np.nan_to_num(np.column_stack([r, g, b]), nan=0.0)
-vertex_colors[:, :3]   = rgb
-vertex_colors[~valid, :3] = 0.0  # no stray colors outside mask
-vertex_colors[valid, 3]   = 1.0  # alpha 1 inside mask, 0 outside
-vertex_colors          = np.clip(vertex_colors, 0.0, 1.0)
-
 np.save(OUT_PATH, vertex_colors)
-print(f"wrote {OUT_PATH}  shape={vertex_colors.shape}  "
-      f"({valid.sum()} / {len(vertices)} vertices inside mask)")
+print(f"wrote {OUT_PATH}  shape={vertex_colors.shape}")
