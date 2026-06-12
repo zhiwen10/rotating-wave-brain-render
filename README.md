@@ -4,7 +4,7 @@ Render a 2D dorsal cortical phase map onto a 3D Allen CCF mouse brain in Blender
 
 | Phase map | Spiral density map |
 |:---------:|:-----------------:|
-| ![Phase map render](processed_data/render_metallic.png) | ![Density map render](processed_data/render_density.png) |
+| ![Phase map render](processed_data/render_metallic.png?v=2) | ![Density map render](processed_data/render_density.png) |
 
 ---
 
