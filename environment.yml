@@ -1,4 +1,4 @@
-name: brainrender
+name: brain_render_2d
 channels:
   - conda-forge
   - defaults

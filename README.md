@@ -38,7 +38,7 @@ phase_colormap.npy               isocortex.obj
 git clone https://github.com/zhiwen10/rotating-wave-brain-render.git
 cd rotating-wave-brain-render
 conda env create -f environment.yml
-conda activate brainrender
+conda activate brain_render_2d
 ```
 
 ### Option B — pip
