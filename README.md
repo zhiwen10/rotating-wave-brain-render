@@ -47,48 +47,86 @@ conda activate brain_render_2d
 pip install trimesh scipy matplotlib numpy mat73 jupyter
 ```
 
-> **Blender** (3.x or 4.x) is needed for Step 2 only — install it separately from [blender.org](https://www.blender.org/download/). The Python packages above are **not** needed inside Blender.
+> **Blender** (3.x or 4.x) is needed for Step 3 only — install it separately from [blender.org](https://www.blender.org/download/). The Python packages above are **not** needed inside Blender.
+
+---
+
+## Workflow
+
+```
+Step 1                    Step 2                       Step 3
+──────────────────────    ─────────────────────────    ──────────────────────────
+01_export_brain_meshes.py  02_prepare_for_blender.ipynb   03_render_blender.py
+                                                        03b_render_matte.py
+runs on: Python            runs on: Python (Jupyter)   runs on: Blender (built-in Python)
+uses:    brainglobe-       uses:    trimesh, scipy,     uses:    bpy (Blender API)
+         atlasapi                   numpy, matplotlib
+                                                                     │
+input:   Allen CCF atlas   input:   phase_colormap.npy  input:   root.obj
+         (auto-download)            isocortex.obj                isocortex.obj
+                                                                 vertex_colors.npy
+output:  root.obj          output:  vertex_colors.npy   output:  render_*.png
+         isocortex.obj
+```
 
 ---
 
 ## Steps
 
-### Step 1 — Prepare vertex colors
+### Step 1 — Export brain meshes
 
-Open and run `notebooks/prepare_for_blender.ipynb`.
+> Skip this step if you are using the provided `sample_data/` files.
 
-The notebook loads `phase_colormap.npy` and `isocortex.obj` from `sample_data/`,
-interpolates the phase colors onto the mesh vertices, shows a visual check, and
-saves `sample_data/vertex_colors.npy`.
+Run `scripts/01_export_brain_meshes.py` in the `brain_render_2d` conda env.
 
-> To use your own data, set `PHASE_COLORMAP_PATH` in the first cell.
+```bash
+python scripts/01_export_brain_meshes.py
+```
+
+Downloads the Allen CCF 25 µm atlas via `brainglobe-atlasapi` (first run only,
+~hundreds of MB) and exports `root.obj` and `isocortex.obj`.
 
 ---
 
-### Step 2 — Render in Blender
+### Step 2 — Prepare vertex colors
+
+Open and run `notebooks/02_prepare_for_blender.ipynb` in the `brain_render_2d` conda env.
+
+```bash
+jupyter notebook notebooks/02_prepare_for_blender.ipynb
+```
+
+Loads `phase_colormap.npy` and `isocortex.obj` from `sample_data/`,
+interpolates the phase colors onto the mesh vertices, shows a visual check,
+and saves `sample_data/vertex_colors.npy`.
+
+> To use your own phase map, set `PHASE_COLORMAP_PATH` in the first cell.
+
+---
+
+### Step 3 — Render in Blender
 
 1. Open Blender → **Scripting** tab
-2. Open a render script and set `data_dir` to the `sample_data/` folder
+2. Open a render script, set `data_dir` to your `sample_data/` folder
 3. Press **▶ Run Script** (or **Alt+P**)
 
-| Script | Style |
-|--------|-------|
-| `scripts/03_render_blender.py` | Metallic / iridescent |
-| `scripts/03b_render_matte.py` | Matte / scientific |
-
-The render is saved as a PNG inside `data_dir`.
+| Script | Runs on | Style | Output |
+|--------|---------|-------|--------|
+| `scripts/03_render_blender.py` | Blender | Metallic / iridescent | `render_metallic.png` |
+| `scripts/03b_render_matte.py` | Blender | Matte / scientific | `render_matte.png` |
 
 ---
 
 ## Sample data
 
-`sample_data/` contains everything needed to run both steps out of the box:
+`sample_data/` contains everything needed to run Steps 2 and 3 out of the box:
 
 | File | Description |
 |------|-------------|
 | `phase_colormap.npy` | 2D phase map, shape `(1320, 1140, 3)` RGB, registered to Allen CCF 25 µm |
 | `isocortex.obj` | Dorsal isocortex surface mesh |
 | `root.obj` | Whole-brain outer shell |
+| `vertex_colors.npy` | Per-vertex RGBA colors (output of Step 2, provided for convenience) |
 
 ---
 
