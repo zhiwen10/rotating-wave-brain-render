@@ -1,0 +1,6 @@
+# Python dependencies for steps 1 and 2 (NOT needed inside Blender)
+brainglobe-atlasapi
+trimesh
+scipy
+numpy
+matplotlib

@@ -1,0 +1,18 @@
+# Data artifacts (regenerate via the pipeline)
+*.obj
+*.npy
+*.png
+*.blend
+*.blend1
+
+# Atlas cache
+.brainglobe/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
