@@ -28,7 +28,7 @@ ap_axis = np.linspace(0, AP_UM, AP_BINS)
 ml_axis = np.linspace(0, ML_UM, ML_BINS)
 Xq, Yq = np.meshgrid(ap_axis, ml_axis, indexing='ij')
 
-density_map  = griddata((ml_pts, ap_pts), density,
+density_map  = griddata((ap_pts, ml_pts), density,
                          (Xq, Yq), method='linear', fill_value=0)
 density_norm = np.clip((density_map - density_map.min()) /
                        (density_map.max() - density_map.min() + 1e-12), 0, 1)

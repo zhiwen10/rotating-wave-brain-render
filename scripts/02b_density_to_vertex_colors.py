@@ -65,7 +65,7 @@ ap_axis = np.linspace(0, AP_TOTAL_UM, AP_BINS)
 ml_axis = np.linspace(0, ML_TOTAL_UM, ML_BINS)
 Xq, Yq = np.meshgrid(ap_axis, ml_axis, indexing='ij')   # (AP, ML) grid
 
-density_map = griddata((ml_pts, ap_pts), density,
+density_map = griddata((ap_pts, ml_pts), density,
                         (Xq, Yq), method='linear', fill_value=0)
 
 # ---------------------------------------------------------------------------
