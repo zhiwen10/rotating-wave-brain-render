@@ -13,26 +13,25 @@ for journal covers, posters, and supplementary figures.
 
 ## Overview
 
-The pipeline has three stages, each producing files used by the next:
+Brain mesh export and phase map preparation are **independent** — run them in
+either order, then combine at the render step.
 
 ```
-Your data (.mat files)
-        │
-        ▼
-[Step 0]  Convert .mat → .npy          notebooks/phase_colormap_workflow.py
-        │
-        ▼
-[Step 1]  Export brain meshes          scripts/01_export_brain_meshes.py
-        │                                    ↓
-        │                         root.obj, isocortex.obj
-        ▼
-[Step 2]  Map data onto mesh vertices  scripts/02_phasemap_to_vertex_colors.py
-        │                                    ↓
-        │                          vertex_colors.npy
-        ▼
-[Step 3]  Render in Blender            scripts/03_render_blender.py  (and variants)
-                                             ↓
-                                        render.png
+  Allen CCF atlas                        Your data (.mat files)
+  (downloaded once)                      (from your analysis pipeline)
+        │                                         │
+        ▼                                         ▼
+  scripts/01_export_brain_meshes.py    notebooks/phase_colormap_workflow.py
+        │                                         │
+        ▼                                         ▼
+  root.obj, isocortex.obj              vertex_colors.npy
+        │                                         │
+        └──────────────┬──────────────────────────┘
+                       ▼
+           scripts/03_render_blender.py  (and variants)
+                       │
+                       ▼
+                  render.png
 ```
 
 ---
@@ -72,29 +71,15 @@ pip install -r requirements.txt
 
 ## Step-by-step usage
 
-### Step 0 — Convert your .mat files to .npy
-
-Run the notebook workflow script once to convert your MATLAB data files and
-verify the registration:
-
-```bash
-# Copy your .mat files into the repo root (or edit the paths inside the script)
-cp /path/to/phase_colormap.mat .
-cp /path/to/spiral_density.mat .
-
-python notebooks/phase_colormap_workflow.py
-```
-
-This produces:
-- `phase_colormap.npy` — RGB phase image `(1320, 1140, 3)` float32
-- `unique_spirals.npy` — spiral coordinates `(N, 3)` float32
-- `interpolation_check.png` — visual sanity check (phase colors projected onto cortex top-down)
-
-Open `interpolation_check.png` to confirm the colors align with the brain outline before rendering.
+The two preparation steps (A and B below) are **independent** — run them in
+either order, then bring the results together for rendering.
 
 ---
 
-### Step 1 — Export brain meshes from the Allen CCF atlas
+### Step A — Export brain meshes  *(one-time)*
+
+This only needs to be done once.  The meshes come from the Allen CCF atlas and
+never change regardless of your experimental data.
 
 ```bash
 python scripts/01_export_brain_meshes.py
@@ -104,9 +89,37 @@ Produces:
 - `root.obj` — whole-brain outer shell
 - `isocortex.obj` — dorsal cortical surface (this is what gets colored)
 
+> First run downloads and caches the Allen CCF 25 µm atlas (~400 MB).
+> Subsequent runs are instant.
+
 ---
 
-### Step 2 — Map your data onto mesh vertices
+### Step B — Convert your data and build vertex colors
+
+Run the notebook workflow script to convert your MATLAB data and map it onto
+the cortex mesh:
+
+```bash
+# Copy your .mat files into the working folder (or edit paths inside the script)
+cp /path/to/phase_colormap.mat .
+cp /path/to/spiral_density.mat .
+
+python notebooks/phase_colormap_workflow.py
+```
+
+This produces:
+- `phase_colormap.npy` — RGB phase image `(1320, 1140, 3)` float32
+- `unique_spirals.npy` — spiral coordinates `(N, 3)` float32
+- `vertex_colors.npy` — per-vertex RGBA colors for the phase map
+- `interpolation_check.png` — visual sanity check (phase colors projected top-down onto the cortex outline)
+
+Open `interpolation_check.png` to confirm alignment before rendering.
+
+> Step B requires `isocortex.obj` from Step A.
+
+---
+
+### Step 2 — Map your data onto mesh vertices  *(alternative to notebook)*
 
 **For the phase map:**
 ```bash

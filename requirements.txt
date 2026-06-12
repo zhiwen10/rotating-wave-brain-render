@@ -1,7 +1,11 @@
-# Python dependencies for steps 01, 02, 02b, and notebooks/ (NOT needed inside Blender)
+# Python dependencies (NOT needed inside Blender)
+
+# Brain mesh export — scripts/01_export_brain_meshes.py
 brainglobe-atlasapi
+
+# Phase map / density data preparation — scripts/02*.py, notebooks/
 trimesh
 scipy
 numpy
 matplotlib
-mat73              # for converting .mat files to .npy (notebooks/phase_colormap_workflow.py)
+mat73              # for converting .mat files to .npy
