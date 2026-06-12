@@ -2,6 +2,10 @@
 
 Render a 2D dorsal cortical phase map onto a 3D Allen CCF mouse brain in Blender.
 
+| Phase map | Spiral density map |
+|:---------:|:-----------------:|
+| ![Phase map render](processed_data/render_metallic.png) | ![Density map render](processed_data/render_density.png) |
+
 ---
 
 ## How it works
@@ -127,14 +131,6 @@ Loads `spiral_density.mat` from `raw_data/` and saves
 |--------|-------|-------|--------|
 | `scripts/03_render_blender.py` | Metallic / iridescent | `processed_data/vertex_colors.npy` | `processed_data/render_metallic.png` |
 | `scripts/03b_render_density.py` | Metallic / density map | `processed_data/vertex_colors_density.npy` | `processed_data/render_density.png` |
-
----
-
-## Example output
-
-| Phase map | Spiral density map |
-|:---------:|:-----------------:|
-| ![Phase map render](processed_data/render_metallic.png) | ![Density map render](processed_data/render_density.png) |
 
 ---
 
