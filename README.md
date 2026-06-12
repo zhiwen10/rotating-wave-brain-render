@@ -30,13 +30,24 @@ phase_colormap.npy               isocortex.obj
 
 ---
 
-## Requirements
+## Installation
+
+### Option A — conda (recommended)
 
 ```bash
-pip install trimesh scipy matplotlib numpy
+git clone https://github.com/zhiwen10/rotating-wave-brain-render.git
+cd rotating-wave-brain-render
+conda env create -f environment.yml
+conda activate brainrender
 ```
 
-Blender 3.x or 4.x for the final render.
+### Option B — pip
+
+```bash
+pip install trimesh scipy matplotlib numpy mat73 jupyter
+```
+
+> **Blender** (3.x or 4.x) is needed for Step 2 only — install it separately from [blender.org](https://www.blender.org/download/). The Python packages above are **not** needed inside Blender.
 
 ---
 

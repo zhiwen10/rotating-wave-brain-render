@@ -1,0 +1,15 @@
+name: brainrender
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - matplotlib
+  - pip
+  - pip:
+    - trimesh
+    - brainglobe-atlasapi
+    - mat73
+    - jupyter
