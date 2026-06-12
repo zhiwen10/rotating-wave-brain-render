@@ -84,25 +84,27 @@ phase_colormap.npy                      isocortex.obj
 
 ## Pipeline overview
 
-Brain mesh export and phase map preparation are **independent** — run them in
-either order, then bring the outputs together for rendering.
+The pipeline has two steps. Brain meshes are already provided in `sample_data/`
+so you only need to run the preparation notebook once with your own data.
 
 ```
-  Allen CCF atlas                        Your data (.mat files)
-  (downloaded once)                      (from your analysis pipeline)
-        │                                         │
-        ▼                                         ▼
-  scripts/01_export_brain_meshes.py    notebooks/phase_colormap_workflow.py
-        │                                         │
-        ▼                                         ▼
-  root.obj  isocortex.obj              vertex_colors.npy
-        │                                         │
-        └──────────────┬──────────────────────────┘
-                       ▼
-           scripts/03_render_blender.py  (and variants)
-                       │
-                       ▼
-                  render.png
+  Your data
+  phase_colormap.npy                sample_data/
+  (from your analysis pipeline)     root.obj  isocortex.obj  (provided)
+          │                                 │
+          └──────────────┬──────────────────┘
+                         ▼
+          notebooks/prepare_for_blender.ipynb
+          (interpolates phase colors onto mesh vertices)
+                         │
+                         ▼
+          sample_data/vertex_colors.npy
+                         │
+                         ▼
+          scripts/03_render_blender.py  (run inside Blender)
+                         │
+                         ▼
+                    render.png
 ```
 
 ---
@@ -114,12 +116,14 @@ either order, then bring the outputs together for rendering.
 - **Blender 3.x or 4.x** — [download here](https://www.blender.org/download/)
   (NumPy is bundled with Blender's Python, no extra install needed inside Blender)
 
-### Your data files
+### Your data file
 
 | File | Description |
 |------|-------------|
-| `phase_colormap.mat` | 2D phase map as an RGB image, registered to Allen CCF. Variable: `rgbImage`, shape `(1320, 1140, 3)`. Cyclic colormap (e.g. CET_C6) already applied in your analysis pipeline. |
-| `spiral_density.mat` | Detected spiral event coordinates. Variable: `unique_spirals`, shape `(N, 3)` — columns are `[AP_µm, ML_µm, density_count]`. |
+| `phase_colormap.npy` | 2D phase map as an RGB image, registered to Allen CCF. Shape `(1320, 1140, 3)`, float32 in `[0, 1]`. Cyclic colormap already applied in your analysis pipeline. |
+
+> Brain mesh files (`root.obj`, `isocortex.obj`) are already provided in
+> `sample_data/` — you do not need to download the atlas.
 
 ---
 
@@ -138,68 +142,37 @@ pip install -r requirements.txt
 
 ## Step-by-step usage
 
-### Step A — Export brain meshes  *(one-time, independent of your data)*
+### Step 1 — Run the preparation notebook
 
-Downloads the Allen CCF atlas and exports the brain surface meshes.  This only
-needs to be done once — the meshes are the same regardless of your experiment.
+Open `notebooks/prepare_for_blender.ipynb` in Jupyter and run all cells.
 
 ```bash
-python scripts/01_export_brain_meshes.py
+jupyter notebook notebooks/prepare_for_blender.ipynb
 ```
 
-Produces:
-- `root.obj` — whole-brain outer shell (used as transparent context in render)
-- `isocortex.obj` — dorsal cortical surface (receives phase colors)
+Edit the `PHASE_COLORMAP_PATH` variable in the first cell to point to your
+`phase_colormap.npy` file.  Everything else is automatic.
 
-> The first run downloads the Allen CCF 25 µm atlas (~400 MB) and caches it
-> in `~/.brainglobe/`.  Subsequent runs are instant.
+The notebook will:
+1. Load your phase colormap
+2. Load `isocortex.obj` from `sample_data/`
+3. Interpolate phase colors onto every 3D vertex of the cortex mesh
+4. Show a visual check so you can confirm the alignment looks correct
+5. Save `sample_data/vertex_colors.npy`
 
 ---
 
-### Step B — Prepare your data and build vertex colors  *(independent of Step A)*
-
-Converts your MATLAB data files and maps the phase map onto the cortex mesh.
-
-```bash
-# Copy your .mat files into the working folder (or edit paths inside the script)
-cp /path/to/phase_colormap.mat .
-cp /path/to/spiral_density.mat .
-
-python notebooks/phase_colormap_workflow.py
-```
-
-This produces:
-- `phase_colormap.npy` — RGB phase image `(1320, 1140, 3)` float32
-- `unique_spirals.npy` — spiral coordinates `(N, 3)` float32
-- `vertex_colors.npy` — one RGBA color per cortex vertex
-- `interpolation_check.png` — top-down scatter plot showing phase colors
-  projected onto the cortex outline; open this to verify alignment before rendering
-
-> Step B reads `isocortex.obj` from Step A, so Step A must be run first.
-
-If you prefer to run the conversion and interpolation as individual scripts
-rather than the notebook:
-
-```bash
-python scripts/02_phasemap_to_vertex_colors.py    # → vertex_colors.npy
-python scripts/02b_density_to_vertex_colors.py    # → vertex_colors_density.npy
-```
-
----
-
-### Step C — Render in Blender
-
-Collect `root.obj`, `isocortex.obj`, and `vertex_colors.npy` into one folder.
+### Step 2 — Render in Blender
 
 1. Open Blender
 2. Go to the **Scripting** tab (top menu bar)
-3. Click **Open** and load a render script — or paste it into a new text block
-4. Set `data_dir` at the top of the script to the folder containing your files
+3. Click **Open** and load a render script
+4. Set `data_dir` at the top of the script to the absolute path of `sample_data/`
 5. Click **▶ Run Script** (or press **Alt+P**)
 
-The render is saved automatically as a PNG in `data_dir`.
+The render is saved automatically as a PNG inside `data_dir`.
 
-**Available render styles:**
+**Choose the style that fits your use case:**
 
 | Script | Style | Best for |
 |--------|-------|----------|
@@ -207,28 +180,25 @@ The render is saved automatically as a PNG in `data_dir`.
 | `scripts/03b_render_matte.py` | Matte / flat-color | Data figures, supplementary panels |
 | `scripts/03c_render_density_scatter.py` | Metallic brain + scatter dots | Spiral event locations |
 
-> To switch between phase and density data in the matte render, change
-> `VERTEX_COLORS_FILE` at the top of `03b_render_matte.py`.
-
 ---
 
 ### (Optional) Choose a custom camera angle
 
-Each render script has a camera angle hardcoded near the bottom.  To capture a
-new angle:
+Each render script has a saved camera angle hardcoded near the bottom.  To
+capture a new angle:
 
 1. Navigate to the desired view in the Blender **3D viewport**
 2. Open `scripts/extract_camera_params.py` in the Scripting tab
 3. Set `MODE = 'viewport'` and run the script
-4. Copy the printed `cam_obj.location` and `cam_obj.rotation_euler` lines into
-   the camera section of your render script
+4. Paste the two printed lines (`cam_obj.location`, `cam_obj.rotation_euler`)
+   into the camera section of your render script
 
 > **macOS tip:** Launch Blender from Terminal to see `print()` output:
 > ```bash
 > /Applications/Blender.app/Contents/MacOS/Blender
 > ```
-> The values are also saved to a **CameraParams** text block in the Blender
-> Text Editor, accessible without a terminal.
+> Values are also saved to a **CameraParams** text block in the Blender Text
+> Editor, accessible without a terminal.
 
 ---
 
@@ -236,16 +206,25 @@ new angle:
 
 ```
 rotating-wave-brain-render/
+├── sample_data/                          ← provided, ready to use
+│   ├── root.obj                          #   whole-brain outer shell
+│   ├── isocortex.obj                     #   dorsal cortex surface mesh
+│   ├── vertex_colors.npy                 #   pre-computed phase colors (sample)
+│   └── spiral_density.mat                #   spiral event coordinates
+│
 ├── notebooks/
-│   └── phase_colormap_workflow.py    # Convert .mat files + build vertex colors
+│   ├── prepare_for_blender.ipynb         ← START HERE — build vertex_colors.npy
+│   └── phase_colormap_workflow.py        #   same pipeline as a plain Python script
+│
 ├── scripts/
-│   ├── 01_export_brain_meshes.py     # Download Allen CCF atlas, export .obj meshes
-│   ├── 02_phasemap_to_vertex_colors.py    # Phase RGB image → vertex_colors.npy
-│   ├── 02b_density_to_vertex_colors.py   # Spiral density → vertex_colors_density.npy
-│   ├── 03_render_blender.py          # Blender: metallic/iridescent, phase map
-│   ├── 03b_render_matte.py           # Blender: matte/scientific style
-│   ├── 03c_render_density_scatter.py # Blender: scatter dots on iridescent brain
-│   └── extract_camera_params.py      # Blender: capture viewport or scene camera angle
+│   ├── 01_export_brain_meshes.py         #   re-export .obj from Allen CCF atlas
+│   ├── 02_phasemap_to_vertex_colors.py   #   phase map → vertex_colors.npy
+│   ├── 02b_density_to_vertex_colors.py   #   density map → vertex_colors_density.npy
+│   ├── 03_render_blender.py              #   Blender: metallic/iridescent style
+│   ├── 03b_render_matte.py               #   Blender: matte/scientific style
+│   ├── 03c_render_density_scatter.py     #   Blender: scatter dots on brain
+│   └── extract_camera_params.py          #   Blender: capture camera angle
+│
 ├── requirements.txt
 └── README.md
 ```
