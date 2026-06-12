@@ -357,14 +357,21 @@ if "Cortex" in imported_objects:
         emission.inputs['Strength'].default_value = CORTEX_EMISSION_STR
         transparent.inputs['Color'].default_value = (1, 1, 1, 1)
 
-        # Opacity control: Fac = how much emission vs transparent
-        mix_final.inputs['Fac'].default_value = CORTEX_OPACITY
+        # Mask-driven opacity: per-vertex alpha (1 inside cortical mask, 0 outside)
+        # multiplied by CORTEX_OPACITY → Mix.Fac. Vertices outside the mask are
+        # fully transparent so the brain shell shows through there.
+        mask_mul = nodes.new('ShaderNodeMath')
+        mask_mul.operation = 'MULTIPLY'
+        mask_mul.inputs[1].default_value = CORTEX_OPACITY
 
         # Node chain: VertexColor -> HSV -> Emission -> Mix with Transparent -> Output
+        #             VertexAlpha * CORTEX_OPACITY -> Mix.Fac
         links.new(vcol.outputs['Color'], hsv.inputs['Color'])
         links.new(hsv.outputs['Color'], emission.inputs['Color'])
         links.new(transparent.outputs['BSDF'], mix_final.inputs[1])   # Fac=0 -> transparent
         links.new(emission.outputs['Emission'], mix_final.inputs[2])  # Fac=1 -> emission
+        links.new(vcol.outputs['Alpha'], mask_mul.inputs[0])
+        links.new(mask_mul.outputs['Value'], mix_final.inputs['Fac'])
         links.new(mix_final.outputs['Shader'], out.inputs['Surface'])
 
         obj.data.materials.append(mat)
